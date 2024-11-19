@@ -1,6 +1,4 @@
-# Expected shortage reduction heuristic policy (2 period lookahead)
-# Will assume a lead-time of 1 for calculating expected shortages.
-# Assumes poisson demand
+# Old don't use. Just a none rust version
 
 import numpy as np
 from gymnasium import Wrapper

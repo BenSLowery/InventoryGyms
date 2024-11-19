@@ -13,7 +13,6 @@ class ts_la(Wrapper):
         super().__init__(env)
         self.exp_calc = 0
         self.cached_configs = {}
-        self.cache_hits = 0
     
     def _lookahead(self, on_hand, k, d1_mean, d2_mean, max_order):
         
@@ -22,8 +21,6 @@ class ts_la(Wrapper):
         """
         config = (on_hand+k, d1_mean, d2_mean, max_order)
         if config in self.cached_configs:
-            self.cache_hits += 1
-            print(str(self.cache_hits) + ' ' + str(len(self.cached_configs)), end='\r')
             return self.cached_configs[config]
         else:
             exp, exp_first_stage, q = rust_lookahead.lookahead(int(on_hand+k), d1_mean, d2_mean, int(max_order))
@@ -122,6 +119,7 @@ class ts_la(Wrapper):
                     source = []
         # Calculate the transhipment matrix and each individual q to return
         final_ts_sums = self._net_transhipments_sum()
+        # The warehouse orders an echelon base-stock policy
         orders = [max(warehouse_order-self.unwrapped.state['warehouse'][0],0)] + [self._lookahead(IL[s]+final_ts_sums[s], 0, d1_means[s], d2_means[s], max_q[s])[-1] for s in range(self.unwrapped.N)]
         self.action_array[0] = orders
 
