@@ -54,7 +54,7 @@ class ts_la(Wrapper):
         d1_means = [self.unwrapped.store_demand_means[t][store] for store in range(self.unwrapped.N)]
 
         if t >= self.unwrapped.periods - 1:
-            d2_means = [0.001 for store in range(self.unwrapped.N)] # We can't have a poisson zero but this is close
+            d2_means = [0.001 for store in range(self.unwrapped.N)] # We can't have a  zero but this is close
         else:
             d2_means = [self.unwrapped.store_demand_means[t + 1][store] for store in range(self.unwrapped.N)]
 
