@@ -30,10 +30,19 @@ class TwoEchelonPLSTS(gym.Env):
         self.store_demand_means = store_demand_means
 
         # Check everything entered was correct
-        # TODO: Add assertions
         assert self.wh_lt > 0, "You need a positive warehouse lead time."
         assert self.st_lt > 0, "You need a positive store lead time."
         assert self.ts_lt <= self.st_lt, "The transhipment lead time cannot be more than the warehouse lead-time"
+        assert self.cap_prod >= 0 and self.cap_w >= 0 and self.cap_s >= 0, "Capacities must be positive"
+        assert self.co_w >= 0 and self.co_s >= 0, "Holding costs must be positive"
+        assert self.cu >= 0, "Penalty must be positive"
+        assert self.p >= 0 and self.p <= 1, "DFW probability must be between 0 and 1"
+        assert len(self.init_warehouse) == self.wh_lt+1, "Initial warehouse inventory must be the same length as the warehouse lead time"
+        assert len(self.init_store) == self.N, "Initial store inventory must be the same length as the number of stores"
+        assert len(self.online_demand_means) == self.periods, "Online demand means must be the same length as the number of periods"
+        assert len(self.store_demand_means) == self.periods, "Store demand means must be the same length as the number of periods"
+        assert len(self.store_demand_means[0]) == self.N, "Store demand means must be the same length as the number of stores"
+
 
         
 
