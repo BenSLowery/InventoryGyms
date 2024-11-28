@@ -41,19 +41,16 @@ class TwoEchelonPLSTS(gym.Env):
             warnings.warn("You haven't set the demand distribution, so we're assuming Poisson for all stores. And doing some slow manipulation. Please set the demand_distribution parameter.")
             self.demand_distribution = ['Poisson' for i in range(self.N+1)]
             store_demand_params = [[store_demand_params[t][i] for t in range(self.periods)] for i in range(self.N)]
-            self.store_demand = np.array([self._gen_demand(demand_distribution[i+1],store_demand_params[i]) for i in range(self.N)])
         else:
             assert len(demand_distribution) == self.N+1, "You need to specify demand distributions for each store AND the online channel. Even if there's no demand to the online channel"
-            self.store_demand = np.array([self._gen_demand(demand_distribution[i+1],store_demand_params[i]) for i in range(self.N)])
-
         # Legacy for heuristics gaining access
         self.store_demand_means = store_demand_params
         self.online_demand_mean = online_demand_params
 
         # Format of the demand params:
         # demand_distribution = ['WH distribution', 'S1 distribution', 'S2 distribution', ...]
-        self.online_demand = self._gen_demand(demand_distribution[0], online_demand_params)
-        self.store_demand = np.array([self._gen_demand(demand_distribution[i+1],store_demand_params[i]) for i in range(self.N)])
+        self.online_demand = self._gen_demand(self.demand_distribution[0], online_demand_params)
+        self.store_demand = np.array([self._gen_demand(self.demand_distribution[i+1],store_demand_params[i]) for i in range(self.N)])
 
         # Check everything entered was correct
         assert self.wh_lt > 0, "You need a positive warehouse lead time."
