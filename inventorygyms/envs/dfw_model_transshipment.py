@@ -45,7 +45,7 @@ class TwoEchelonPLSTS(gym.Env):
             assert len(demand_distribution) == self.N+1, "You need to specify demand distributions for each store AND the online channel. Even if there's no demand to the online channel"
         # Legacy for heuristics gaining access
         self.store_demand_means = store_demand_params
-        self.online_demand_mean = online_demand_params
+        self.online_demand_means = online_demand_params
 
         # Format of the demand params:
         # demand_distribution = ['WH distribution', 'S1 distribution', 'S2 distribution', ...]
