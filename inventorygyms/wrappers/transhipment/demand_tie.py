@@ -95,7 +95,7 @@ class ts_TIE(Wrapper):
         IL = self._get_inventory_level() # Inventory Position of stores for the transhipment lead-time
 
         # Get the demand over this lead time
-        demand_stores = np.array(self.unwrapped.store_demand_means[t])
+        demand_stores = np.array([self.unwrapped.store_demand_means[store][t] for store in range(self.unwrapped.N)])
 
         # Calculate equalised inventories for each store
         eq_func = lambda d: d/demand_stores.sum()*IL.sum() # Lambda function to calculate equalised inventory

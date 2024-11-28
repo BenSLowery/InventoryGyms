@@ -14,17 +14,36 @@ class ts_la(Wrapper):
         self.exp_calc = 0
         self.cached_configs = {}
     
-    def _lookahead(self, on_hand, k, d1_mean, d2_mean, max_order):
+    def _calc_max_qs(self,d2_means):
+        """
+            Calculate the maximium orders for each store based on proportion of warehouse availability
+        """
+        means = []
+        for idx, store_dist in enumerate(self.unwrapped.demand_distribution[1:]):
+            if store_dist == 'Poisson':
+                store_mean = d2_means[idx]
+            elif store_dist == 'NegBin':
+                store_mean = (d2_means[idx][0]*(1-d2_means[idx][1]))/(d2_means[idx][1]) if d2_means[idx][1] != 0 else 0
+            elif store_dist == 'Binomial':
+                store_mean = d2_means[idx][0]*d2_means[idx][1]
+            means.append(store_mean)
+        return [np.floor((store_mean/sum(means))*self.unwrapped.state['warehouse'][0]) for store_mean in means]
+        
+    def _lookahead(self, on_hand, k, d1_params, d2_params, max_order, distribution='Poisson'):
         
         """
             Lookahead policy, optimises transhipments in the first period and orders in the second
         """
-        config = (on_hand+k, d1_mean, d2_mean, max_order)
+        config = (on_hand+k, d1_params, d2_params, max_order, distribution)
         if config in self.cached_configs:
             return self.cached_configs[config]
         else:
-            exp, exp_first_stage, q = rust_lookahead.lookahead(int(on_hand+k), d1_mean, d2_mean, int(max_order))
-
+            if distribution =='Poisson':
+                exp, exp_first_stage, q = rust_lookahead.lookahead(int(on_hand+k), d1_params, d2_params, int(max_order), cu=self.unwrapped.cu, co=self.unwrapped.co_s, cdfw=self.unwrapped.c_dfw,p=self.unwrapped.p)
+            elif distribution == 'NegBin':
+                exp, exp_first_stage, q = rust_lookahead.lookahead(int(on_hand+k), d1_params[0], d2_params[0], int(max_order), d1_params[1], d2_params[1],  distribution='N',cu=self.unwrapped.cu, co=self.unwrapped.co_s, cdfw=self.unwrapped.c_dfw,p=self.unwrapped.p)
+            elif distribution == 'Binomial':
+                exp, exp_first_stage, q = rust_lookahead.lookahead(int(on_hand+k), d1_params[0], d2_params[0], int(max_order), d1_params[1], d2_params[1],  distribution='B',cu=self.unwrapped.cu, co=self.unwrapped.co_s, cdfw=self.unwrapped.c_dfw,p=self.unwrapped.p)
             # Add to cache
             self.cached_configs[config] = [exp, exp_first_stage, q]
 
@@ -51,12 +70,15 @@ class ts_la(Wrapper):
         IL = self.unwrapped.state['store'][:,0] # Inventory level for each store
 
         # Calculate means
-        d1_means = [self.unwrapped.store_demand_means[t][store] for store in range(self.unwrapped.N)]
+        d1_means = [self.unwrapped.store_demand_means[store][t] for store in range(self.unwrapped.N)]
+
+        # Final stage means for each distribution (since this will be the terminal period so only a one period lookahead)
+        final_stage_means = {'Poisson': 0, 'Binomial': (0,0), 'NegBin': (0,0)}
 
         if t >= self.unwrapped.periods - 1:
-            d2_means = [0.001 for store in range(self.unwrapped.N)] # We can't have a  zero but this is close
+            d2_means = [final_stage_means[self.unwrapped.demand_distribution[store+1]] for store in range(self.unwrapped.N)]
         else:
-            d2_means = [self.unwrapped.store_demand_means[t + 1][store] for store in range(self.unwrapped.N)]
+            d2_means = [self.unwrapped.store_demand_means[store][t+1] for store in range(self.unwrapped.N)]
 
         if transhipment == True:
 
@@ -67,9 +89,8 @@ class ts_la(Wrapper):
             source = [i for i in range(self.unwrapped.N) if IL[i] > 0]
             destination = [i for i in range(self.unwrapped.N)]
 
-            # Max q 
-            d2_means_sum = sum(d2_means)
-            max_q = [np.floor((d2_means[s]/(d2_means_sum))*self.unwrapped.state['warehouse'][0]) for s in range(self.unwrapped.N)]
+            # Max q for each store
+            max_q = self._calc_max_qs(d2_means) if self.unwrapped.t < self.unwrapped.periods - 1 else [0 for i in range(self.unwrapped.N)]
 
             # LOGIC: its very hacky 
             while (len(source) > 0) and (len(destination) > 0):
@@ -83,8 +104,8 @@ class ts_la(Wrapper):
                 
                 for s_idx in source:
                     # Calculate expected shortages
-                    alpha_minus_1, alpha_minus_1_immediate, q = self._lookahead(IL[s_idx]+ts_sums[s_idx], -1, d1_means[s_idx], d2_means[s_idx], max_q[s_idx])
-                    alpha_0, alpha_0_immediate, _ = self._lookahead(IL[s_idx]+ts_sums[s_idx], 0, d1_means[s_idx], d2_means[s_idx], max_q[s_idx])
+                    alpha_minus_1, alpha_minus_1_immediate, q = self._lookahead(IL[s_idx]+ts_sums[s_idx], -1, d1_means[s_idx], d2_means[s_idx], max_q[s_idx], self.unwrapped.demand_distribution[s_idx+1])
+                    alpha_0, alpha_0_immediate, _ = self._lookahead(IL[s_idx]+ts_sums[s_idx], 0, d1_means[s_idx], d2_means[s_idx], max_q[s_idx], self.unwrapped.demand_distribution[s_idx+1])
                     alpha_val.append(alpha_minus_1-alpha_0)
                     alpha_val_immediate.append(alpha_minus_1_immediate-alpha_0_immediate)
                 
@@ -94,8 +115,8 @@ class ts_la(Wrapper):
 
                 for d_idx in destination:
                     # Calculate expected shortages
-                    delta_0, delta_0_immediate, _ = self._lookahead(IL[d_idx]+ts_sums[d_idx], 0,  d1_means[d_idx], d2_means[d_idx], max_q[d_idx])
-                    delta_plus_1, delta_plus_1_immediate, _ = self._lookahead(IL[d_idx]+ts_sums[d_idx], 1, d1_means[d_idx], d2_means[d_idx], max_q[d_idx])
+                    delta_0, delta_0_immediate, _ = self._lookahead(IL[d_idx]+ts_sums[d_idx], 0,  d1_means[d_idx], d2_means[d_idx], max_q[d_idx], self.unwrapped.demand_distribution[d_idx+1])
+                    delta_plus_1, delta_plus_1_immediate, _ = self._lookahead(IL[d_idx]+ts_sums[d_idx], 1, d1_means[d_idx], d2_means[d_idx], max_q[d_idx], self.unwrapped.demand_distribution[d_idx+1])
                     delta_val.append(delta_0-delta_plus_1)
                     delta_val_immediate.append(delta_0_immediate-delta_plus_1_immediate)
                 
@@ -120,7 +141,7 @@ class ts_la(Wrapper):
         # Calculate the transhipment matrix and each individual q to return
         final_ts_sums = self._net_transhipments_sum()
         # The warehouse orders an echelon base-stock policy
-        orders = [max(warehouse_order-self.unwrapped.state['warehouse'][0],0)] + [self._lookahead(IL[s]+final_ts_sums[s], 0, d1_means[s], d2_means[s], max_q[s])[-1] for s in range(self.unwrapped.N)]
+        orders = [max(warehouse_order-self.unwrapped.state['warehouse'][0],0)] + [self._lookahead(IL[s]+final_ts_sums[s], 0, d1_means[s], d2_means[s], max_q[s], self.unwrapped.demand_distribution[s+1])[-1] for s in range(self.unwrapped.N)]
         self.action_array[0] = orders
 
         return self.action_array

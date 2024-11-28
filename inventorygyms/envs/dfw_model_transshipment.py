@@ -4,12 +4,20 @@
 
 import gymnasium as gym
 import numpy as np
+import warnings
 
 class TwoEchelonPLSTS(gym.Env):
     '''
         lead_time = [warehouse, store, transhipment]
+
+        Format of demand:
+        demand_distribution = ['WH distribution', 'S1 distribution', 'S2 distribution', ...]
+        store_demand_params = [[STORE 1 params for each period], [STORE 2 params for each period], ...]
+        So if you have 3 stores and 100 periods, you would have:
+        demand_distribution = ['Poisson', 'Poisson', 'Poisson', 'Poisson']
+        store_demand_params = [[5,5,5,5,...], [5,5,5,5,...], [5,5,5,5,...]]
     '''
-    def __init__(self, periods=100, stores=2, lead_time=[2,2,0],  production_capacity=1000, warehouse_capacity=1000, store_capacity=200, dfw_chance=0.8, dfw_cost=0, ts_cost=1, holding_warehouse=1, holding_store=1, penalty=18, initial_inventory=[[50,0,0],[50,0,0],[50,0,0]],  online_demand_means=[0 for i in range(100)], store_demand_means = [[5,5] for i in range(100)]):
+    def __init__(self, periods=100, stores=2, lead_time=[2,2,0],  production_capacity=1000, warehouse_capacity=1000, store_capacity=200, dfw_chance=0.8, dfw_cost=0, ts_cost=1, holding_warehouse=1, holding_store=1, penalty=18, initial_inventory=[[50,0,0],[50,0,0],[50,0,0]],  online_demand_params=[0 for i in range(100)], store_demand_params = [[5,5] for i in range(100)], demand_distribution=None):
         self.periods = periods
         self.N = stores
         self.wh_lt = lead_time[0]
@@ -26,8 +34,26 @@ class TwoEchelonPLSTS(gym.Env):
         self.cu = penalty
         self.init_warehouse = initial_inventory[0]
         self.init_store = initial_inventory[1:]
-        self.online_demand_means = online_demand_means
-        self.store_demand_means = store_demand_means
+        self.demand_distribution = demand_distribution
+
+        # For backwards compatibility send a warning if the demand distribution is not set
+        if self.demand_distribution is None:
+            warnings.warn("You haven't set the demand distribution, so we're assuming Poisson for all stores. And doing some slow manipulation. Please set the demand_distribution parameter.")
+            self.demand_distribution = ['Poisson' for i in range(self.N+1)]
+            store_demand_params = [[store_demand_params[t][i] for t in range(self.periods)] for i in range(self.N)]
+            self.store_demand = np.array([self._gen_demand(demand_distribution[i+1],store_demand_params[i]) for i in range(self.N)])
+        else:
+            assert len(demand_distribution) == self.N+1, "You need to specify demand distributions for each store AND the online channel. Even if there's no demand to the online channel"
+            self.store_demand = np.array([self._gen_demand(demand_distribution[i+1],store_demand_params[i]) for i in range(self.N)])
+
+        # Legacy for heuristics gaining access
+        self.store_demand_means = store_demand_params
+        self.online_demand_mean = online_demand_params
+
+        # Format of the demand params:
+        # demand_distribution = ['WH distribution', 'S1 distribution', 'S2 distribution', ...]
+        self.online_demand = self._gen_demand(demand_distribution[0], online_demand_params)
+        self.store_demand = np.array([self._gen_demand(demand_distribution[i+1],store_demand_params[i]) for i in range(self.N)])
 
         # Check everything entered was correct
         assert self.wh_lt > 0, "You need a positive warehouse lead time."
@@ -39,10 +65,7 @@ class TwoEchelonPLSTS(gym.Env):
         assert self.p >= 0 and self.p <= 1, "DFW probability must be between 0 and 1"
         assert len(self.init_warehouse) == self.wh_lt+1, "Initial warehouse inventory must be the same length as the warehouse lead time"
         assert len(self.init_store) == self.N, "Initial store inventory must be the same length as the number of stores"
-        assert len(self.online_demand_means) == self.periods, "Online demand means must be the same length as the number of periods"
-        assert len(self.store_demand_means) == self.periods, "Store demand means must be the same length as the number of periods"
-        assert len(self.store_demand_means[0]) == self.N, "Store demand means must be the same length as the number of stores"
-
+    
 
         
 
@@ -64,6 +87,16 @@ class TwoEchelonPLSTS(gym.Env):
             "store": gym.spaces.Box(low=np.zeros((self.N, self.st_lt+1)), high=np.ones((self.N,self.st_lt+1))*self.cap_s, dtype=np.int32)
         })
 
+
+    def _gen_demand(self, distribution, params):
+
+        if distribution == 'Poisson':
+            return self.np_random.poisson(params)
+        elif distribution == 'NegBin':
+            return self.np_random.negative_binomial([r for r,p in params], [p for r,p in params])
+        elif distribution == 'Binomial':
+            return self.np_random.binomial([n for n,p in params], [p for n,p in params])
+        ValueError("Bare with, haven't finished this yet.")
 
     def net_transhipments(self, ts_action):
         stores = self.N
@@ -214,8 +247,8 @@ class TwoEchelonPLSTS(gym.Env):
 
 
         # Generate demand
-        D_wh = self.np_random.poisson(self.online_demand_means[t])
-        D_st = self.np_random.poisson(self.store_demand_means[t])
+        D_wh = self.online_demand[t]
+        D_st = self.store_demand[:,t]
 
         # Append to the demand vector
         self.D[:,t] = np.concatenate(([D_wh], D_st))

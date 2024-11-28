@@ -17,7 +17,7 @@ class ts_ESR(Wrapper):
         self.exp_calc = 0
         self.cached_configs = {}
         
-    def _two_period_expectation(self, idx, on_hand, k, d1_mean, d2_mean):
+    def _two_period_expectation(self, idx, on_hand, k, d1_params, d2_params, distribution='Poisson'):
         """
             Calculate the discritised expectation for two periods
 
@@ -27,16 +27,29 @@ class ts_ESR(Wrapper):
         net_ts = self._net_transhipments_sum(idx, k)
 
         # See if combo is already cached
-        config = (idx,on_hand,k,net_ts,d1_mean, d2_mean)
+        config = (idx,on_hand,k,net_ts,d1_params, d2_params, distribution)
         
         if config in self.cached_configs:
             return self.cached_configs[config]
         else:
             if self.r is None:
-                exp, exp_first_stage = rust_expectation.expectation(int(on_hand+net_ts), d1_mean, d2_mean, self.st_out[idx])
+                if distribution == 'Poisson':
+                    # Go through the distributions which decides what we pass to the rust function
+                    exp, exp_first_stage = rust_expectation.expectation(int(on_hand+net_ts), d1_params, d2_params, self.st_out[idx],p=self.unwrapped.p)
+                elif distribution == 'Binomial':
+                    exp, exp_first_stage = rust_expectation.expectation(int(on_hand+net_ts), d1_params[0], d2_params[0], self.st_out[idx], d1_params[1], d2_params[1], distribution='B',p=self.unwrapped.p)
+                elif distribution == 'NegBin':
+                    exp, exp_first_stage = rust_expectation.expectation(int(on_hand+net_ts), d1_params[0], d2_params[0], self.st_out[idx], d1_params[1], d2_params[1], distribution='N',p=self.unwrapped.p)
             else:
-                exp, exp_first_stage = rust_expectation.expectation(int(on_hand+net_ts), d1_mean, d2_mean, self.st_out[idx], self.r[idx])
-            
+                if distribution == 'Poisson':
+                    # Go through the distributions which decides what we pass to the rust function
+                    exp, exp_first_stage = rust_expectation.expectation(int(on_hand+net_ts), d1_params, d2_params, self.st_out[idx], self.r[idx], distribution='P',p=self.unwrapped.p)
+                elif distribution == 'Binomial':
+                    # Go through the distributions which decides what we pass to the rust function
+                    exp, exp_first_stage = rust_expectation.expectation(int(on_hand+net_ts), d1_params[0], d2_params[0], self.st_out[idx], d1_params[1], d2_params[1], r=self.r[idx], distribution='B',p=self.unwrapped.p)
+                elif distribution == 'NegBin':
+                    # Go through the distributions which decides what we pass to the rust function
+                    exp, exp_first_stage = rust_expectation.expectation(int(on_hand+net_ts), d1_params[0], d2_params[0], self.st_out[idx], d1_params[1], d2_params[1], r=self.r[idx], distribution='N',p=self.unwrapped.p)
             # Add to cache
             self.cached_configs[config] = [exp, exp_first_stage]
             return exp, exp_first_stage
@@ -133,21 +146,25 @@ class ts_ESR(Wrapper):
         IL = self.unwrapped.state['store'][:,0] # Inventory level for each store
 
         if transhipment == True:
-
+            
             # Transhipment code
             ######################
+
 
             # Separate source and destination nodes
             source = [i for i in range(self.unwrapped.N) if IL[i] > 0]
             destination = [i for i in range(self.unwrapped.N)]
 
             # Calculate means
-            d1_means = [self.unwrapped.store_demand_means[t][store] for store in range(self.unwrapped.N)]
+            d1_means = [self.unwrapped.store_demand_means[store][t] for store in range(self.unwrapped.N)]
+
+            # Final stage means for each distribution (since this will be the terminal period so only a one period lookahead)
+            final_stage_means = {'Poisson': 0, 'Binomial': (0,0), 'NegBin': (0,0)}
 
             if t >= self.unwrapped.periods - 1:
-                d2_means = [0.001 for store in range(self.unwrapped.N)]
+                d2_means = [final_stage_means[self.unwrapped.demand_distribution[store+1]] for store in range(self.unwrapped.N)]
             else:
-                d2_means = [self.unwrapped.store_demand_means[t + 1][store] for store in range(self.unwrapped.N)]
+                d2_means = [self.unwrapped.store_demand_means[store][t+1] for store in range(self.unwrapped.N)]
 
             # LOGIC: its very hacky 
             while (len(source) > 0) and (len(destination) > 0):
@@ -158,8 +175,8 @@ class ts_ESR(Wrapper):
                 
                 for s_idx in source:
                     # Calculate expected shortages
-                    alpha_minus_1, alpha_minus_1_immediate = self._two_period_expectation(s_idx,IL[s_idx], -1, d1_means[s_idx], d2_means[s_idx])
-                    alpha_0, alpha_0_immediate = self._two_period_expectation(s_idx,IL[s_idx], 0, d1_means[s_idx], d2_means[s_idx])
+                    alpha_minus_1, alpha_minus_1_immediate = self._two_period_expectation(s_idx,IL[s_idx], -1, d1_means[s_idx], d2_means[s_idx], self.unwrapped.demand_distribution[s_idx+1])
+                    alpha_0, alpha_0_immediate = self._two_period_expectation(s_idx,IL[s_idx], 0, d1_means[s_idx], d2_means[s_idx], self.unwrapped.demand_distribution[s_idx+1])
                     alpha_val.append(alpha_minus_1-alpha_0)
                     alpha_val_immediate.append(alpha_minus_1_immediate-alpha_0_immediate)
                 
@@ -169,8 +186,8 @@ class ts_ESR(Wrapper):
 
                 for d_idx in destination:
                     # Calculate expected shortages
-                    delta_0, delta_0_immediate = self._two_period_expectation(d_idx,IL[d_idx], 0,  d1_means[d_idx], d2_means[d_idx])
-                    delta_plus_1, delta_plus_1_immediate = self._two_period_expectation(d_idx,IL[d_idx], 1, d1_means[d_idx], d2_means[d_idx])
+                    delta_0, delta_0_immediate = self._two_period_expectation(d_idx,IL[d_idx], 0,  d1_means[d_idx], d2_means[d_idx], self.unwrapped.demand_distribution[d_idx+1])
+                    delta_plus_1, delta_plus_1_immediate = self._two_period_expectation(d_idx,IL[d_idx], 1, d1_means[d_idx], d2_means[d_idx], self.unwrapped.demand_distribution[d_idx+1])
                     delta_val.append(delta_0-delta_plus_1)
                     delta_val_immediate.append(delta_0_immediate-delta_plus_1_immediate)
                 
