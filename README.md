@@ -125,7 +125,9 @@ Misc.
 ======
 ### Distributions Supported
 **Poisson:** $\lambda \leq 28$
+
 **Negative Binomial:** If $x\sim NB(r,p)$, then, $\mathbb{P}[x\geq 50]\leq 0.001$
+
 **Binomial:** $n \leq 50$
 
 ### To-dos
