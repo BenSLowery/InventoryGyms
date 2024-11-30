@@ -203,7 +203,7 @@ class ts_ESR(Wrapper):
                     if np.diag(self.action_array).sum() > 0:
                         raise Exception('Stuck in an infinite transhipment loop :(')
 
-                    if (IL[source[alpha]] - self._net_transhipments_sum(source[alpha],0) <= 0):
+                    if (IL[source[alpha]] + self._net_transhipments_sum(source[alpha],0) <= 0):
                         source.remove(source[alpha])
 
                 else: 

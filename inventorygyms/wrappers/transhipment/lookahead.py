@@ -131,8 +131,8 @@ class ts_la(Wrapper):
                     # Check we haven't done a transhipment to ourselves. If so we raise an error
                     if np.diag(self.action_array).sum() > 0:
                         raise Exception('Stuck in an infinite transhipment loop :(')
-
-                    if (IL[source[alpha]] - ts_sums[source[alpha]]<= 0):
+                    
+                    if (IL[source[alpha]] + ts_sums[source[alpha]]<= 0):
                         source.remove(source[alpha])
 
                 else: 
