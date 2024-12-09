@@ -7,7 +7,7 @@
 import numpy as np
 from gymnasium import Wrapper
 import scipy.stats as sp
-import functools
+from functools import lru_cache
 import wrapper_alternative as rust_expectation
 
 
@@ -15,8 +15,9 @@ class ts_ESR(Wrapper):
     def __init__(self, env):
         super().__init__(env)
         self.exp_calc = 0
-        self.cached_configs = {}
+
         
+    @lru_cache(maxsize=1024)
     def _two_period_expectation(self, idx, on_hand, k, d1_params, d2_params, distribution='Poisson'):
         """
             Calculate the discritised expectation for two periods
@@ -26,33 +27,27 @@ class ts_ESR(Wrapper):
         # Precompute net transhipments to reduce calling function
         net_ts = self._net_transhipments_sum(idx, k)
 
-        # See if combo is already cached
-        config = (idx,on_hand,k,net_ts,d1_params, d2_params, distribution)
-        
-        if config in self.cached_configs:
-            return self.cached_configs[config]
+  
+        if self.r is None:
+            if distribution == 'Poisson':
+                # Go through the distributions which decides what we pass to the rust function
+                exp, exp_first_stage = rust_expectation.expectation(int(on_hand+net_ts), d1_params, d2_params, self.st_out[idx],p=self.unwrapped.p)
+            elif distribution == 'Binomial':
+                exp, exp_first_stage = rust_expectation.expectation(int(on_hand+net_ts), d1_params[0], d2_params[0], self.st_out[idx], d1_params[1], d2_params[1], distribution='B',p=self.unwrapped.p)
+            elif distribution == 'NegBin':
+                exp, exp_first_stage = rust_expectation.expectation(int(on_hand+net_ts), d1_params[0], d2_params[0], self.st_out[idx], d1_params[1], d2_params[1], distribution='N',p=self.unwrapped.p)
         else:
-            if self.r is None:
-                if distribution == 'Poisson':
-                    # Go through the distributions which decides what we pass to the rust function
-                    exp, exp_first_stage = rust_expectation.expectation(int(on_hand+net_ts), d1_params, d2_params, self.st_out[idx],p=self.unwrapped.p)
-                elif distribution == 'Binomial':
-                    exp, exp_first_stage = rust_expectation.expectation(int(on_hand+net_ts), d1_params[0], d2_params[0], self.st_out[idx], d1_params[1], d2_params[1], distribution='B',p=self.unwrapped.p)
-                elif distribution == 'NegBin':
-                    exp, exp_first_stage = rust_expectation.expectation(int(on_hand+net_ts), d1_params[0], d2_params[0], self.st_out[idx], d1_params[1], d2_params[1], distribution='N',p=self.unwrapped.p)
-            else:
-                if distribution == 'Poisson':
-                    # Go through the distributions which decides what we pass to the rust function
-                    exp, exp_first_stage = rust_expectation.expectation(int(on_hand+net_ts), d1_params, d2_params, self.st_out[idx], self.r[idx], distribution='P',p=self.unwrapped.p)
-                elif distribution == 'Binomial':
-                    # Go through the distributions which decides what we pass to the rust function
-                    exp, exp_first_stage = rust_expectation.expectation(int(on_hand+net_ts), d1_params[0], d2_params[0], self.st_out[idx], d1_params[1], d2_params[1], r=self.r[idx], distribution='B',p=self.unwrapped.p)
-                elif distribution == 'NegBin':
-                    # Go through the distributions which decides what we pass to the rust function
-                    exp, exp_first_stage = rust_expectation.expectation(int(on_hand+net_ts), d1_params[0], d2_params[0], self.st_out[idx], d1_params[1], d2_params[1], r=self.r[idx], distribution='N',p=self.unwrapped.p)
-            # Add to cache
-            self.cached_configs[config] = [exp, exp_first_stage]
-            return exp, exp_first_stage
+            if distribution == 'Poisson':
+                # Go through the distributions which decides what we pass to the rust function
+                exp, exp_first_stage = rust_expectation.expectation(int(on_hand+net_ts), d1_params, d2_params, self.st_out[idx], self.r[idx], distribution='P',p=self.unwrapped.p)
+            elif distribution == 'Binomial':
+                # Go through the distributions which decides what we pass to the rust function
+                exp, exp_first_stage = rust_expectation.expectation(int(on_hand+net_ts), d1_params[0], d2_params[0], self.st_out[idx], d1_params[1], d2_params[1], r=self.r[idx], distribution='B',p=self.unwrapped.p)
+            elif distribution == 'NegBin':
+                # Go through the distributions which decides what we pass to the rust function
+                exp, exp_first_stage = rust_expectation.expectation(int(on_hand+net_ts), d1_params[0], d2_params[0], self.st_out[idx], d1_params[1], d2_params[1], r=self.r[idx], distribution='N',p=self.unwrapped.p)
+        # Add to cache
+        return exp, exp_first_stage
 
 
     def _net_transhipments_sum(self, i,k):

@@ -17,7 +17,7 @@ class TwoEchelonPLSTS(gym.Env):
         demand_distribution = ['Poisson', 'Poisson', 'Poisson', 'Poisson']
         store_demand_params = [[5,5,5,5,...], [5,5,5,5,...], [5,5,5,5,...]]
     '''
-    def __init__(self, periods=100, stores=2, lead_time=[2,2,0],  production_capacity=1000, warehouse_capacity=1000, store_capacity=200, dfw_chance=0.8, dfw_cost=0, ts_cost=1, holding_warehouse=1, holding_store=1, penalty=18, initial_inventory=[[50,0,0],[50,0,0],[50,0,0]],  online_demand_params=[0 for i in range(100)], store_demand_params = [[5,5] for i in range(100)], demand_distribution=None):
+    def __init__(self, periods=100, stores=2, lead_time=[2,2,0],  production_capacity=1000, warehouse_capacity=1000, store_capacity=200, dfw_chance=0.8, dfw_cost=0, ts_cost=1, holding_warehouse=1, holding_store=1, penalty=18, initial_inventory=[[50,0,0],[50,0,0],[50,0,0]],  online_demand_params=[0 for i in range(100)], store_demand_params = [[5,5] for i in range(100)], demand_distribution=None,ringfence=0):
         self.periods = periods
         self.N = stores
         self.wh_lt = lead_time[0]
@@ -35,6 +35,7 @@ class TwoEchelonPLSTS(gym.Env):
         self.init_warehouse = initial_inventory[0]
         self.init_store = initial_inventory[1:]
         self.demand_distribution = demand_distribution
+        self.ringfence = ringfence
 
         # For backwards compatibility send a warning if the demand distribution is not set
         if self.demand_distribution is None:
@@ -62,8 +63,10 @@ class TwoEchelonPLSTS(gym.Env):
         assert self.p >= 0 and self.p <= 1, "DFW probability must be between 0 and 1"
         assert len(self.init_warehouse) == self.wh_lt+1, "Initial warehouse inventory must be the same length as the warehouse lead time"
         assert len(self.init_store) == self.N, "Initial store inventory must be the same length as the number of stores"
-    
+        assert ringfence >= 0, "The ringfenced amount for online demand needs to be positive"    
 
+        if self.ringfence > 0:
+            warnings.warn('Ringfencing is not implemented yet. Please ignore this parameter.')
         
 
         # Initialise
