@@ -7,7 +7,7 @@ build-backend = "setuptools.build_meta"
 
 [project]
 name = "inventorygyms"
-version = "0.1.1"
+version = "0.1.2"
 dependencies = [
     "gymnasium==0.29.1"
 ]
