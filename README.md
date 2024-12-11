@@ -1,6 +1,8 @@
 # An inventory gym environment 
 
-Current Version: `0.1.1`
+Current Version: `0.1.3`
+
+Used as a testing and evaluation environment for PhD research into stochastic inventory policies. The underlying problem is formulated as a Stochastic Dynamic Program, however, due to the curse of dimensionality, and to allow for high-fidelity modelling, we choose to use a simulation environment to test and run policies.
 
 Requirements
 ============
@@ -134,4 +136,4 @@ Misc.
 - [ ] Allow ringfencing for online demand
 - [ ] Add more distributions to support
 - [ ] Give example of using DeepRL for the problem
-- [ ] Implement ESR for longer than a 2 period problem. 
+- [ ] Comprehensive documentation
