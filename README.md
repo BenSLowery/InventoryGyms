@@ -135,5 +135,8 @@ Misc.
 ### To-dos
 - [ ] Allow ringfencing for online demand
 - [ ] Add more distributions to support
+  - [x] Normal
+    - [ ] Heuristics to use Normal demand
+  - [ ] Support Online demand that's non-poisson
 - [ ] Give example of using DeepRL for the problem
 - [ ] Comprehensive documentation

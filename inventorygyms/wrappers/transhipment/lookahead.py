@@ -70,7 +70,7 @@ class ts_la(Wrapper):
         IL = self.unwrapped.state['store'][:,0] # Inventory level for each store
 
         # Calculate means
-        d1_means = [self.unwrapped.store_demand_means[store][t] for store in range(self.unwrapped.N)]
+        d1_means = [self.unwrapped.store_demand_params[store][t] for store in range(self.unwrapped.N)]
 
         # Final stage means for each distribution (since this will be the terminal period so only a one period lookahead)
         final_stage_means = {'Poisson': 0, 'Binomial': (0,0), 'NegBin': (0,0)}
@@ -78,7 +78,7 @@ class ts_la(Wrapper):
         if t >= self.unwrapped.periods - 1:
             d2_means = [final_stage_means[self.unwrapped.demand_distribution[store+1]] for store in range(self.unwrapped.N)]
         else:
-            d2_means = [self.unwrapped.store_demand_means[store][t+1] for store in range(self.unwrapped.N)]
+            d2_means = [self.unwrapped.store_demand_params[store][t+1] for store in range(self.unwrapped.N)]
 
         if transhipment == True:
 

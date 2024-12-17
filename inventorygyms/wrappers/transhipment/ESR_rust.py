@@ -70,7 +70,7 @@ class ts_ESR(Wrapper):
             Allocate stock to the stores
         '''
         # Add online order to the desired quantity (since we need to keep some in for online demand)
-        desired = [sp.poisson(self.unwrapped.online_demand_means[self.unwrapped.t]).ppf(self.unwrapped.cu/(self.unwrapped.cu+self.unwrapped.co_w))] + desired
+        desired = [sp.poisson(self.unwrapped.online_demand_params[self.unwrapped.t]).ppf(self.unwrapped.cu/(self.unwrapped.cu+self.unwrapped.co_w))] + desired
         actual_allocation = [0 for i in range(len(desired))]
 
         for i in range(int(avaialable)):
@@ -160,7 +160,7 @@ class ts_ESR(Wrapper):
             destination = [i for i in range(self.unwrapped.N)]
 
             # Calculate means
-            d1_means = [self.unwrapped.store_demand_means[store][t] for store in range(self.unwrapped.N)]
+            d1_means = [self.unwrapped.store_demand_params[store][t] for store in range(self.unwrapped.N)]
 
             # Final stage means for each distribution (since this will be the terminal period so only a one period lookahead)
             final_stage_means = {'Poisson': 0, 'Binomial': (0,0), 'NegBin': (0,0)}
@@ -168,7 +168,7 @@ class ts_ESR(Wrapper):
             if t >= self.unwrapped.periods - 1:
                 d2_means = [final_stage_means[self.unwrapped.demand_distribution[store+1]] for store in range(self.unwrapped.N)]
             else:
-                d2_means = [self.unwrapped.store_demand_means[store][t+1] for store in range(self.unwrapped.N)]
+                d2_means = [self.unwrapped.store_demand_params[store][t+1] for store in range(self.unwrapped.N)]
 
             # LOGIC: its very hacky 
             while (len(source) > 0) and (len(destination) > 0):

@@ -17,7 +17,7 @@ class TwoEchelonPLSTS(gym.Env):
         demand_distribution = ['Poisson', 'Poisson', 'Poisson', 'Poisson']
         store_demand_params = [[5,5,5,5,...], [5,5,5,5,...], [5,5,5,5,...]]
     '''
-    def __init__(self, periods=100, stores=2, lead_time=[2,2,0],  production_capacity=1000, warehouse_capacity=1000, store_capacity=200, dfw_chance=0.8, dfw_cost=0, ts_cost=1, holding_warehouse=1, holding_store=1, penalty=18, initial_inventory=[[50,0,0],[50,0,0],[50,0,0]],  online_demand_params=[0 for i in range(100)], store_demand_params = [[5,5] for i in range(100)], demand_distribution=None,ringfence=0):
+    def __init__(self, periods=100, stores=2, lead_time=[2,2,0],  production_capacity=1000, warehouse_capacity=1000, store_capacity=200, dfw_chance=0.8, dfw_cost=0, ts_cost=1, holding_warehouse=1, holding_store=1, penalty=18, initial_inventory=[[50,0,0],[50,0,0],[50,0,0]],  online_demand_params=[0 for i in range(100)], store_demand_params = [[5 for i in range(100)] for j in range(2)], demand_distribution=None,ringfence=0):
         self.periods = periods
         self.N = stores
         self.wh_lt = lead_time[0]
@@ -44,14 +44,16 @@ class TwoEchelonPLSTS(gym.Env):
             store_demand_params = [[store_demand_params[t][i] for t in range(self.periods)] for i in range(self.N)]
         else:
             assert len(demand_distribution) == self.N+1, "You need to specify demand distributions for each store AND the online channel. Even if there's no demand to the online channel"
-        # Legacy for heuristics gaining access
-        self.store_demand_means = store_demand_params
-        self.online_demand_means = online_demand_params
+        
+        # Store the params
+        self.online_demand_params = online_demand_params
+        self.store_demand_params = store_demand_params
 
-        # Format of the demand params:
-        # demand_distribution = ['WH distribution', 'S1 distribution', 'S2 distribution', ...]
-        self.online_demand = self._gen_demand(self.demand_distribution[0], online_demand_params)
-        self.store_demand = np.array([self._gen_demand(self.demand_distribution[i+1],store_demand_params[i]) for i in range(self.N)])
+        # Store the means (as this would be demand distribution specific)
+        means = self._calc_means([online_demand_params] + store_demand_params)
+        self.store_demand_means = means[1:]
+        self.online_demand_means = means[0]
+
 
         # Check everything entered was correct
         assert self.wh_lt > 0, "You need a positive warehouse lead time."
@@ -88,6 +90,20 @@ class TwoEchelonPLSTS(gym.Env):
         })
 
 
+    def _calc_means(self, params):
+        means = []
+        for idx, distr in enumerate(self.demand_distribution):
+            if distr == 'Poisson':
+                means.append(params[idx])
+            elif distr == 'Binomial':
+                means.append([p[0]*p[1] for p in params[idx]])
+            elif distr == 'Normal':
+                means.append([m for m,s in params[idx]])
+            elif distr == 'NegBin':
+                means.append([(r*(1-p))/p for r,p in params[idx]])
+        return means
+
+
     def _gen_demand(self, distribution, params):
 
         if distribution == 'Poisson':
@@ -96,6 +112,10 @@ class TwoEchelonPLSTS(gym.Env):
             return self.np_random.negative_binomial([r for r,p in params], [p for r,p in params])
         elif distribution == 'Binomial':
             return self.np_random.binomial([n for n,p in params], [p for n,p in params])
+        elif distribution == 'Normal':
+            # Since normal is a continuous distribution we need to round it to the nearest integer and clip any negative values
+            temp_demand = self.np_random.normal([m for m,s in params], [s for m,s in params])
+            return np.maximum(np.round(temp_demand),0)
         ValueError("Bare with, haven't finished this yet.")
 
     def net_transhipments(self, ts_action):
@@ -122,6 +142,11 @@ class TwoEchelonPLSTS(gym.Env):
         self.t = 0 # Initial period
         self.I_o_H_wh[0] = init_inv_wh
         self.I_o_H_st[:,0] = init_inv_st
+
+
+        # Reset demand
+        self.online_demand = self._gen_demand(self.demand_distribution[0], self.online_demand_params)
+        self.store_demand = np.array([self._gen_demand(self.demand_distribution[i+1],self.store_demand_params[i]) for i in range(self.N)])
 
         self.wh_actions_log = np.zeros(T, dtype=np.int32) # Logs the warehouse actions for the pipeline, i.e. how much got added
         self.st_actions_log = np.zeros((self.N, T), dtype=np.int32) # Logs the store actions for the pipeline
