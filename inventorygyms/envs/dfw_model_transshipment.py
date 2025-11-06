@@ -281,14 +281,10 @@ class TwoEchelonPLSTS(gym.Env):
         # Realise demand
         I_o_H_wh -= D_wh
         I_o_H_st -= D_st
-
         # Calculate the DFW fulfilment for each store
         for store_idx, store in enumerate(I_o_H_st):
             if store < 0 :
-                dfw_request = self.np_random.binomial(np.abs(store), self.p)
-
-                # We can only give DFW from what's available in the warehouse
-                dfw_request = np.minimum(dfw_request, np.maximum(I_o_H_wh,0))
+                dfw_request = self.np_random.binomial(np.minimum(np.abs(store), np.maximum(I_o_H_wh,0)), self.p)
                 self.dfw_fulfillment[store_idx,t] = dfw_request    
 
                 # Take the DFW from the warehouse and reduce store stockout
@@ -351,6 +347,7 @@ class TwoEchelonPLSTS(gym.Env):
             'Period Cost': -reward
         }
         return self.state, reward, terminated, False, info
+    
     def step(self, action):
         return self._STEP(action)
     

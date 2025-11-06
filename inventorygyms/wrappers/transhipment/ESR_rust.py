@@ -8,7 +8,7 @@ import numpy as np
 from gymnasium import Wrapper
 import scipy.stats as sp
 import wrapper_alternative as rust_expectation
-
+from ..ordering import RegularBaseStock
 
 class ts_ESR(Wrapper):
     def __init__(self, env):
@@ -149,7 +149,7 @@ class ts_ESR(Wrapper):
   
         IL = self.unwrapped.state['store'][:,0] # Inventory level for each store
 
-        if transhipment == True:
+        if transhipment:
             
             # Transhipment code
             ######################
@@ -220,6 +220,8 @@ class ts_ESR(Wrapper):
         elif ordering_type == 'Capped':
             # Terribly inefficiant
             orders = self.capped_base_stock_ordering_action({'warehouse': ordering_action['warehouse'], 'store': ordering_action['store']},ordering_action['r'])
+        elif ordering_type == 'RegBS':
+            orders = RegularBaseStock.BaseStock(self.unwrapped).base_stock_action(ordering_action)
         else:
             raise Exception('Unspecified ordering action given.')
 

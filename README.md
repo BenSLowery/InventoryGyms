@@ -105,7 +105,7 @@ trans_env = ESR.ts_ESR(env_2)
 
 terminated = False
 cost = []
-
+j=0
 while not terminated:
     print('Period: {}'.format(j))
     j+=1

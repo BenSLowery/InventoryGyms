@@ -2,6 +2,7 @@
 import numpy as np
 from gymnasium import Wrapper
 import scipy.stats as sp
+from ..ordering import RegularBaseStock
 
 class ts_TIE(Wrapper):
     def __init__(self, env):
@@ -179,6 +180,8 @@ class ts_TIE(Wrapper):
         elif ordering_type == 'Capped':
             # Terribly inefficiant
             orders = self.capped_base_stock_ordering_action({'warehouse': ordering_action['warehouse'], 'store': ordering_action['store']},ordering_action['r'])
+        elif ordering_type == 'RegBS':
+            orders = RegularBaseStock.BaseStock(self.unwrapped).base_stock_action(ordering_action)
         else:
             raise Exception('Unspecified ordering action given.')
 

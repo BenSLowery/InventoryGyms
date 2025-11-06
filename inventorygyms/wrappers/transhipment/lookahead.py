@@ -4,6 +4,7 @@ import numpy as np
 from gymnasium import Wrapper
 import scipy.stats as sp
 import functools
+from ..ordering import RegularBaseStock
 import wrapper_alternative as rust_lookahead
 
 
@@ -27,7 +28,12 @@ class ts_la(Wrapper):
             elif store_dist == 'Binomial':
                 store_mean = d2_means[idx][0]*d2_means[idx][1]
             means.append(store_mean)
-        return [np.floor((store_mean/sum(means))*self.unwrapped.state['warehouse'][0]) for store_mean in means]
+        initial_max_q = [np.floor((store_mean/sum(means))*self.unwrapped.state['warehouse'][0]) for store_mean in means]
+        if sum(initial_max_q) != self.unwrapped.state['warehouse'][0]:
+            # Add one more to the max store mean
+            max_idx = means.index(max(means))
+            initial_max_q[max_idx] += 1
+        return initial_max_q
         
     def _lookahead(self, on_hand, k, d1_params, d2_params, max_order, distribution='Poisson'):
         
@@ -57,7 +63,7 @@ class ts_la(Wrapper):
         """
         return [sum([self.action_array[j+1,i+1]-self.action_array[i+1,j+1] for j in range(self.unwrapped.N)]) for i in range(self.unwrapped.N)]
 
-    def generate_action(self, warehouse_order, transhipment=True):
+    def generate_action(self, warehouse_order, transhipment=True,warehouse_order_type='EchBS'):
         # Assumes the warehouse operates an order up to policy
         self.action_array = np.zeros((self.unwrapped.N+1,self.unwrapped.N+1))
 
@@ -141,7 +147,12 @@ class ts_la(Wrapper):
         # Calculate the transhipment matrix and each individual q to return
         final_ts_sums = self._net_transhipments_sum()
         # The warehouse orders an echelon base-stock policy
-        orders = [max(warehouse_order-self.unwrapped.state['warehouse'][0],0)] + [self._lookahead(IL[s]+final_ts_sums[s], 0, d1_means[s], d2_means[s], max_q[s], self.unwrapped.demand_distribution[s+1])[-1] for s in range(self.unwrapped.N)]
+        final_store_orders = [self._lookahead(IL[s]+final_ts_sums[s], 0, d1_means[s], d2_means[s], max_q[s], self.unwrapped.demand_distribution[s+1])[-1] for s in range(self.unwrapped.N)]
+        if warehouse_order_type == 'EchBS':
+            orders = [max(warehouse_order-self.unwrapped.state['warehouse'][0],0)] + [self._lookahead(IL[s]+final_ts_sums[s], 0, d1_means[s], d2_means[s], max_q[s], self.unwrapped.demand_distribution[s+1])[-1] for s in range(self.unwrapped.N)]
+        elif warehouse_order_type == 'RegBS':
+            final_warehouse = max(warehouse_order - max(self.unwrapped.state['warehouse'][0]-np.sum(final_store_orders),0),0)
+            orders = [final_warehouse] + final_store_orders
         self.action_array[0] = orders
 
         return self.action_array
