@@ -5,7 +5,7 @@ from gymnasium import Wrapper
 import scipy.stats as sp
 import functools
 from ..ordering import RegularBaseStock
-import wrapper_alternative as rust_lookahead
+import one_period_shortage as rust_lookahead
 
 
 

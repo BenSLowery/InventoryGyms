@@ -7,7 +7,7 @@
 import numpy as np
 from gymnasium import Wrapper
 import scipy.stats as sp
-import wrapper_alternative as rust_expectation
+import one_period_shortage as rust_expectation
 from ..ordering import RegularBaseStock
 
 class ts_ESR(Wrapper):

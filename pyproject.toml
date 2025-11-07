@@ -7,9 +7,10 @@ build-backend = "setuptools.build_meta"
 
 [project]
 name = "inventorygyms"
-version = "0.2.0"
+version = "0.2.1"
 dependencies = [
-    "gymnasium==0.29.1"
+    "gymnasium==0.29.1",
+    "one_period_shortage@git+https://github.com/BenSLowery/one_period_shortage",
 ]
 
 [tool.setuptools.packages.find]
