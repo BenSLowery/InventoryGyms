@@ -1,6 +1,6 @@
 # An inventory gym environment 
 
-Current Version: `0.1.3`
+Current Version: `0.2.1`
 
 Used as a testing and evaluation environment for PhD research into stochastic inventory policies. The underlying problem is formulated as a Stochastic Dynamic Program, however, due to the curse of dimensionality, and to allow for high-fidelity modelling, we choose to use a simulation environment to test and run policies.
 

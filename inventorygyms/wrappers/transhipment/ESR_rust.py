@@ -219,7 +219,7 @@ class ts_ESR(Wrapper):
             orders = self.capped_base_stock_ordering_action(ordering_action)
         elif ordering_type == 'Capped':
             # Terribly inefficiant
-            orders = self.capped_base_stock_ordering_action({'warehouse': ordering_action['warehouse'], 'store': ordering_action['store']},ordering_action['r'])
+            orders = RegularBaseStock.BaseStock(self.unwrapped).base_stock_action(ordering_action, True)
         elif ordering_type == 'RegBS':
             orders = RegularBaseStock.BaseStock(self.unwrapped).base_stock_action(ordering_action)
         else:

@@ -27,7 +27,7 @@ class BaseStock(Wrapper):
         # We dont' need to return the warehouse quantity since this will be implied from the other orders
         return actual_allocation[1:]
 
-    def base_stock_action(self,O_u_T, r=None):
+    def base_stock_action(self,O_u_T, r=False):
         '''
             Sample a base-stock action
             O_u_T = [Integer, ndarray]: Base-stock level
@@ -44,8 +44,10 @@ class BaseStock(Wrapper):
         store_cap = self.unwrapped.cap_s
 
         # Set order cap to the store OuT if one is not provided
-        if r is None:
+        if not r:
             r = store_out
+        else:
+            r = O_u_T['r']
         
         # Calculate store inventory order
         desired_store_orders = []
