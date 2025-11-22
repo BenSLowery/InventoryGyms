@@ -238,6 +238,14 @@ class ts_la(Wrapper):
                 else:
                     destination = []
                     source = []
+        else:
+            # Max q for each store
+            max_q = (
+                self._calc_max_qs(d2_means)
+                if self.unwrapped.t < self.unwrapped.periods - 1
+                else [0 for i in range(self.unwrapped.N)]
+            )
+
         # Calculate the transhipment matrix and each individual q to return
         final_ts_sums = self._net_transhipments_sum()
         # The warehouse orders an echelon base-stock policy
