@@ -29,7 +29,7 @@ class TwoEchelonPLSTS(gym.Env):
         store_capacity=200,
         dfw_chance=0.8,
         dfw_cost=0,
-        ts_cost=1,
+        ts_cost=[1,1],
         holding_warehouse=1,
         holding_store=1,
         penalty=18,
@@ -393,7 +393,7 @@ class TwoEchelonPLSTS(gym.Env):
             )
             cost_st[-1] += (
                 dfw_cost * self.dfw_fulfillment[store_idx, t]
-                + transhipment_cost * transhipments_out[store_idx]
+                + transhipment_cost[store_idx] * transhipments_out[store_idx]
             )
 
         self.C_st[:, t] = cost_st
