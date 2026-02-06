@@ -1,4 +1,4 @@
-# An inventory gym environment 
+# An inventory gym environment (Clustering)
 
 Current Version: `0.2.1`
 
