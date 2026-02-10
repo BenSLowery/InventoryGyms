@@ -171,16 +171,16 @@ class ts_la(Wrapper):
                         alpha_minus_1, alpha_minus_1_immediate, q = self._lookahead(
                             IL[s_idx] + ts_sums[s_idx],
                             -1,
-                            d1_means[s_idx_init],
-                            d2_means[s_idx_init],
+                            d1_means[s_idx],
+                            d2_means[s_idx],
                             max_q[s_idx],
                             self.unwrapped.demand_distribution[s_idx + 1],
                         )
                         alpha_0, alpha_0_immediate, _ = self._lookahead(
                             IL[s_idx] + ts_sums[s_idx],
                             0,
-                            d1_means[s_idx_init],
-                            d2_means[s_idx_init],
+                            d1_means[s_idx],
+                            d2_means[s_idx],
                             max_q[s_idx],
                             self.unwrapped.demand_distribution[s_idx + 1],
                         )
@@ -200,8 +200,8 @@ class ts_la(Wrapper):
 
                             IL[d_idx] + ts_sums[d_idx],
                             0,
-                            d1_means[d_idx_init],
-                            d2_means[d_idx_init],
+                            d1_means[d_idx],
+                            d2_means[d_idx],
                             max_q[d_idx],
                             self.unwrapped.demand_distribution[d_idx + 1],
                         )
@@ -229,6 +229,7 @@ class ts_la(Wrapper):
                         self.action_array[group_indexes[source[alpha]] + 1, group_indexes[destination[delta]] + 1] += 1
 
                         # Check we haven't done a transhipment to ourselves. If so we raise an error
+
                         if np.diag(self.action_array).sum() > 0:
                             raise Exception("Stuck in an infinite transhipment loop :(")
 
