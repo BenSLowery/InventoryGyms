@@ -22,14 +22,15 @@ class TwoEchelonPLSTS(gym.Env):
     def __init__(
         self,
         periods=100,
-        stores=2,
+        stores=6,
+        cluster_assignment = [1,2,1,2,3,3],
         lead_time=[2, 2, 0],
         production_capacity=1000,
         warehouse_capacity=1000,
         store_capacity=200,
         dfw_chance=0.8,
         dfw_cost=0,
-        ts_cost=[1,1],
+        ts_cost_for_cluster={1: 1,2: 3,3: 2},
         holding_warehouse=1,
         holding_store=1,
         penalty=18,
@@ -49,7 +50,10 @@ class TwoEchelonPLSTS(gym.Env):
         self.cap_s = store_capacity
         self.p = dfw_chance
         self.c_dfw = dfw_cost
-        self.c_ts = ts_cost
+
+        self.cluster_mapping = cluster_assignment
+        # Map the TS cost to the cluster
+        self.c_ts = ts_cost_for_cluster
         self.co_w = holding_warehouse
         self.co_s = holding_store
         self.cu = penalty
@@ -376,7 +380,7 @@ class TwoEchelonPLSTS(gym.Env):
         penalty = self.cu
         dfw_cost = self.c_dfw
         transhipment_cost = self.c_ts
-
+        
         # WH
         cost_wh = (
             np.abs(I_o_H_wh) * penalty
@@ -393,7 +397,7 @@ class TwoEchelonPLSTS(gym.Env):
             )
             cost_st[-1] += (
                 dfw_cost * self.dfw_fulfillment[store_idx, t]
-                + transhipment_cost[store_idx] * transhipments_out[store_idx]
+                + transhipment_cost[self.cluster_mapping[store_idx]] * transhipments_out[store_idx]
             )
 
         self.C_st[:, t] = cost_st

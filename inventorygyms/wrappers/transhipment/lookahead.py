@@ -2,10 +2,7 @@
 
 import numpy as np
 from gymnasium import Wrapper
-import scipy.stats as sp
-import functools
-from ..ordering import RegularBaseStock
-import one_period_shortage as rust_lookahead
+import one_period_shortage as rust_lookahead 
 
 
 class ts_la(Wrapper):
@@ -122,7 +119,6 @@ class ts_la(Wrapper):
             return self.action_array
 
         IL = self.unwrapped.state["store"][:, 0]  # Inventory level for each store
-
         # Calculate means
         d1_means = [
             self.unwrapped.store_demand_params[store][t]
@@ -143,101 +139,105 @@ class ts_la(Wrapper):
                 for store in range(self.unwrapped.N)
             ]
 
-        if transhipment == True:
+        if transhipment:
             # Transhipment code
             ######################
-
-            # Separate source and destination nodes
-            source = [i for i in range(self.unwrapped.N) if IL[i] > 0]
-            destination = [i for i in range(self.unwrapped.N)]
-
-            # Max q for each store
             max_q = (
                 self._calc_max_qs(d2_means)
                 if self.unwrapped.t < self.unwrapped.periods - 1
                 else [0 for i in range(self.unwrapped.N)]
             )
 
-            # LOGIC: its very hacky
-            while (len(source) > 0) and (len(destination) > 0):
-                # Get transhipments
-                ts_sums = self._net_transhipments_sum()
+            for group_id in self.unwrapped.c_ts.keys():
+                group_indexes = [idx for idx, a in enumerate(self.unwrapped.cluster_mapping) if a == group_id]
+                    
+                # Separate source and destination nodes
+                source = [i for i in range(len(group_indexes)) if IL[group_indexes[i]] > 0]
+                destination = [i for i in range(len(group_indexes))]
 
-                alpha_val = []  # To find best source
-                alpha_val_immediate = []
-                delta_val = []  # To find best destination
-                delta_val_immediate = []
+                # LOGIC: its very hacky
+                while (len(source) > 0) and (len(destination) > 0):
+                    # Get transhipments
+                    ts_sums = self._net_transhipments_sum()
 
-                for s_idx in source:
-                    # Calculate expected shortages
-                    alpha_minus_1, alpha_minus_1_immediate, q = self._lookahead(
-                        IL[s_idx] + ts_sums[s_idx],
-                        -1,
-                        d1_means[s_idx],
-                        d2_means[s_idx],
-                        max_q[s_idx],
-                        self.unwrapped.demand_distribution[s_idx + 1],
-                    )
-                    alpha_0, alpha_0_immediate, _ = self._lookahead(
-                        IL[s_idx] + ts_sums[s_idx],
-                        0,
-                        d1_means[s_idx],
-                        d2_means[s_idx],
-                        max_q[s_idx],
-                        self.unwrapped.demand_distribution[s_idx + 1],
-                    )
-                    alpha_val.append(alpha_minus_1 - alpha_0)
-                    alpha_val_immediate.append(
-                        alpha_minus_1_immediate - alpha_0_immediate
-                    )
+                    alpha_val = []  # To find best source
+                    alpha_val_immediate = []
+                    delta_val = []  # To find best destination
+                    delta_val_immediate = []
 
-                # Get arg min
-                min_alpha = min(alpha_val)
-                alpha = alpha_val.index(min_alpha)
+                    for s_idx_init in source:
+                        s_idx = group_indexes[s_idx_init]
+                        # Calculate expected shortages
+                        alpha_minus_1, alpha_minus_1_immediate, q = self._lookahead(
+                            IL[s_idx] + ts_sums[s_idx],
+                            -1,
+                            d1_means[s_idx_init],
+                            d2_means[s_idx_init],
+                            max_q[s_idx],
+                            self.unwrapped.demand_distribution[s_idx + 1],
+                        )
+                        alpha_0, alpha_0_immediate, _ = self._lookahead(
+                            IL[s_idx] + ts_sums[s_idx],
+                            0,
+                            d1_means[s_idx_init],
+                            d2_means[s_idx_init],
+                            max_q[s_idx],
+                            self.unwrapped.demand_distribution[s_idx + 1],
+                        )
+                        alpha_val.append(alpha_minus_1 - alpha_0)
+                        alpha_val_immediate.append(
+                            alpha_minus_1_immediate - alpha_0_immediate
+                        )
 
-                for d_idx in destination:
-                    # Calculate expected shortages
-                    delta_0, delta_0_immediate, _ = self._lookahead(
-                        IL[d_idx] + ts_sums[d_idx],
-                        0,
-                        d1_means[d_idx],
-                        d2_means[d_idx],
-                        max_q[d_idx],
-                        self.unwrapped.demand_distribution[d_idx + 1],
-                    )
-                    delta_plus_1, delta_plus_1_immediate, _ = self._lookahead(
-                        IL[d_idx] + ts_sums[d_idx],
-                        1,
-                        d1_means[d_idx],
-                        d2_means[d_idx],
-                        max_q[d_idx],
-                        self.unwrapped.demand_distribution[d_idx + 1],
-                    )
-                    delta_val.append(delta_0 - delta_plus_1)
-                    delta_val_immediate.append(
-                        delta_0_immediate - delta_plus_1_immediate
-                    )
+                    # Get arg min
+                    min_alpha = min(alpha_val)
+                    alpha = alpha_val.index(min_alpha)
 
-                # Get arg max
-                max_delta = max(delta_val)
-                delta = delta_val.index(max_delta)
+                    for d_idx_init in destination:
+                        d_idx = group_indexes[d_idx_init]
+                        # Calculate expected shortages
+                        delta_0, delta_0_immediate, _ = self._lookahead(
 
-                if (
-                    (max_delta - min_alpha) > self.unwrapped.c_ts / self.unwrapped.cu
-                ) and ((delta_val_immediate[delta]) >= (alpha_val_immediate[alpha])):
-                    # Make the transhipment
-                    self.action_array[source[alpha] + 1, destination[delta] + 1] += 1
+                            IL[d_idx] + ts_sums[d_idx],
+                            0,
+                            d1_means[d_idx_init],
+                            d2_means[d_idx_init],
+                            max_q[d_idx],
+                            self.unwrapped.demand_distribution[d_idx + 1],
+                        )
+                        delta_plus_1, delta_plus_1_immediate, _ = self._lookahead(
+                            IL[d_idx] + ts_sums[d_idx],
+                            1,
+                            d1_means[d_idx],
+                            d2_means[d_idx],
+                            max_q[d_idx],
+                            self.unwrapped.demand_distribution[d_idx + 1],
+                        )
+                        delta_val.append(delta_0 - delta_plus_1)
+                        delta_val_immediate.append(
+                            delta_0_immediate - delta_plus_1_immediate
+                        )
 
-                    # Check we haven't done a transhipment to ourselves. If so we raise an error
-                    if np.diag(self.action_array).sum() > 0:
-                        raise Exception("Stuck in an infinite transhipment loop :(")
+                    # Get arg max
+                    max_delta = max(delta_val)
+                    delta = delta_val.index(max_delta)
 
-                    if IL[source[alpha]] + ts_sums[source[alpha]] <= 0:
-                        source.remove(source[alpha])
+                    if (
+                        (max_delta - min_alpha) > self.unwrapped.c_ts[self.unwrapped.cluster_mapping[group_indexes[alpha]]] / self.unwrapped.cu
+                    ) and ((delta_val_immediate[delta]) >= (alpha_val_immediate[alpha])):
+                        # Make the transhipment
+                        self.action_array[group_indexes[source[alpha]] + 1, group_indexes[destination[delta]] + 1] += 1
 
-                else:
-                    destination = []
-                    source = []
+                        # Check we haven't done a transhipment to ourselves. If so we raise an error
+                        if np.diag(self.action_array).sum() > 0:
+                            raise Exception("Stuck in an infinite transhipment loop :(")
+
+                        if IL[group_indexes[source[alpha]]] + ts_sums[group_indexes[source[alpha]]] <= 0:
+                            source.remove(group_indexes[source[alpha]])
+
+                    else:
+                        destination = []
+                        source = []
         else:
             # Max q for each store
             max_q = (

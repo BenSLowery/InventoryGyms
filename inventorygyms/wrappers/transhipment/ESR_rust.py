@@ -222,114 +222,118 @@ class ts_ESR(Wrapper):
         if transhipment:
             # Transhipment code
             ######################
+            for group_id in self.unwrapped.c_ts.keys():
+                group_indexes = [idx for idx, a in enumerate(self.unwrapped.cluster_mapping) if a == group_id]
+                # Separate source and destination nodes
+                source = [i for i in range(len(group_indexes)) if IL[group_indexes[i]] > 0]
+                destination = [i for i in range(len(group_indexes))]
 
-            # Separate source and destination nodes
-            source = [i for i in range(self.unwrapped.N) if IL[i] > 0]
-            destination = [i for i in range(self.unwrapped.N)]
-
-            # Calculate means
-            d1_means = [
-                self.unwrapped.store_demand_params[store][t]
-                for store in range(self.unwrapped.N)
-            ]
-
-            # Final stage means for each distribution (since this will be the terminal period so only a one period lookahead)
-            final_stage_means = {"Poisson": 0, "Binomial": (0, 0), "NegBin": (0, 0)}
-
-            if t >= self.unwrapped.periods - 1:
-                d2_means = [
-                    final_stage_means[self.unwrapped.demand_distribution[store + 1]]
-                    for store in range(self.unwrapped.N)
-                ]
-            else:
-                d2_means = [
-                    self.unwrapped.store_demand_params[store][t + 1]
-                    for store in range(self.unwrapped.N)
+                # Calculate means
+                d1_means = [
+                    self.unwrapped.store_demand_params[group_indexes[store]][t]
+                    for store in range(len(group_indexes))
                 ]
 
-            # LOGIC: its very hacky
-            while (len(source) > 0) and (len(destination) > 0):
-                alpha_val = []  # To find best source
-                alpha_val_immediate = []
-                delta_val = []  # To find best destination
-                delta_val_immediate = []
+                # Final stage means for each distribution (since this will be the terminal period so only a one period lookahead)
+                final_stage_means = {"Poisson": 0, "Binomial": (0, 0), "NegBin": (0, 0)}
 
-                for s_idx in source:
-                    # Calculate expected shortages
-                    alpha_minus_1, alpha_minus_1_immediate = (
-                        self._two_period_expectation(
+                if t >= self.unwrapped.periods - 1:
+                    d2_means = [
+                        final_stage_means[self.unwrapped.demand_distribution[group_indexes[store] + 1]]
+                        for store in range(len(group_indexes))
+                    ]
+                else:
+                    d2_means = [
+                        self.unwrapped.store_demand_params[group_indexes[store]][t + 1]
+                        for store in range(len(group_indexes))
+                    ]
+
+                # LOGIC: its very hacky
+                while (len(source) > 0) and (len(destination) > 0):
+                    alpha_val = []  # To find best source
+                    alpha_val_immediate = []
+                    delta_val = []  # To find best destination
+                    delta_val_immediate = []
+
+                    for s_idx_init in source:
+                        s_idx = group_indexes[s_idx_init]
+                        # Calculate expected shortages
+                        alpha_minus_1, alpha_minus_1_immediate = (
+                            self._two_period_expectation(
+                                s_idx,
+                                IL[s_idx],
+                                -1,
+                                d1_means[s_idx_init],
+                                d2_means[s_idx_init],
+                                self.unwrapped.demand_distribution[s_idx + 1],
+                            )
+                        )
+                        alpha_0, alpha_0_immediate = self._two_period_expectation(
                             s_idx,
                             IL[s_idx],
-                            -1,
-                            d1_means[s_idx],
-                            d2_means[s_idx],
+                            0,
+                            d1_means[s_idx_init],
+                            d2_means[s_idx_init],
                             self.unwrapped.demand_distribution[s_idx + 1],
                         )
-                    )
-                    alpha_0, alpha_0_immediate = self._two_period_expectation(
-                        s_idx,
-                        IL[s_idx],
-                        0,
-                        d1_means[s_idx],
-                        d2_means[s_idx],
-                        self.unwrapped.demand_distribution[s_idx + 1],
-                    )
-                    alpha_val.append(alpha_minus_1 - alpha_0)
-                    alpha_val_immediate.append(
-                        alpha_minus_1_immediate - alpha_0_immediate
-                    )
+                        alpha_val.append(alpha_minus_1 - alpha_0)
+                        alpha_val_immediate.append(
+                            alpha_minus_1_immediate - alpha_0_immediate
+                        )
 
-                # Get arg min
-                min_alpha = min(alpha_val)
-                alpha = alpha_val.index(min_alpha)
+                    # Get arg min
+                    min_alpha = min(alpha_val)
+                    alpha = alpha_val.index(min_alpha)
 
-                for d_idx in destination:
-                    # Calculate expected shortages
-                    delta_0, delta_0_immediate = self._two_period_expectation(
-                        d_idx,
-                        IL[d_idx],
-                        0,
-                        d1_means[d_idx],
-                        d2_means[d_idx],
-                        self.unwrapped.demand_distribution[d_idx + 1],
-                    )
-                    delta_plus_1, delta_plus_1_immediate = self._two_period_expectation(
-                        d_idx,
-                        IL[d_idx],
-                        1,
-                        d1_means[d_idx],
-                        d2_means[d_idx],
-                        self.unwrapped.demand_distribution[d_idx + 1],
-                    )
-                    delta_val.append(delta_0 - delta_plus_1)
-                    delta_val_immediate.append(
-                        delta_0_immediate - delta_plus_1_immediate
-                    )
 
-                # Get arg max
-                max_delta = max(delta_val)
-                delta = delta_val.index(max_delta)
+                    for d_idx_init in destination:
+                        d_idx = group_indexes[d_idx_init]
+                        # Calculate expected shortages
+                        delta_0, delta_0_immediate = self._two_period_expectation(
+                            d_idx,
+                            IL[d_idx],
+                            0,
+                            d1_means[d_idx_init],
+                            d2_means[d_idx_init],
+                            self.unwrapped.demand_distribution[d_idx + 1],
+                        )
+                        delta_plus_1, delta_plus_1_immediate = self._two_period_expectation(
+                            d_idx,
+                            IL[d_idx],
+                            1,
+                            d1_means[d_idx_init],
+                            d2_means[d_idx_init],
+                            self.unwrapped.demand_distribution[d_idx + 1],
+                        )
+                        delta_val.append(delta_0 - delta_plus_1)
+                        delta_val_immediate.append(
+                            delta_0_immediate - delta_plus_1_immediate
+                        )
 
-                if (
-                    (max_delta - min_alpha) > self.unwrapped.c_ts / self.unwrapped.cu
-                ) and ((delta_val_immediate[delta]) >= (alpha_val_immediate[alpha])):
-                    # Make the transhipment
-                    self.action_array[source[alpha] + 1, destination[delta] + 1] += 1
-
-                    # Check we haven't done a transhipment to ourselves. If so we raise an error
-                    if np.diag(self.action_array).sum() > 0:
-                        raise Exception("Stuck in an infinite transhipment loop :(")
+                    # Get arg max
+                    max_delta = max(delta_val)
+                    delta = delta_val.index(max_delta)
 
                     if (
-                        IL[source[alpha]]
-                        + self._net_transhipments_sum(source[alpha], 0)
-                        <= 0
-                    ):
-                        source.remove(source[alpha])
+                        (max_delta - min_alpha) > self.unwrapped.c_ts[self.unwrapped.cluster_mapping[group_indexes[alpha]]] / self.unwrapped.cu
+                    ) and ((delta_val_immediate[delta]) >= (alpha_val_immediate[alpha])):
+                        # Make the transhipment
+                        self.action_array[group_indexes[source[alpha]] + 1, group_indexes[destination[delta]] + 1] += 1
 
-                else:
-                    destination = []
-                    source = []
+                        # Check we haven't done a transhipment to ourselves. If so we raise an error
+                        if np.diag(self.action_array).sum() > 0:
+                            raise Exception("Stuck in an infinite transhipment loop :(")
+
+                        if (
+                            IL[group_indexes[source[alpha]]]
+                            + self._net_transhipments_sum(group_indexes[source[alpha]], 0)
+                            <= 0
+                        ):
+                            source.remove(source[alpha])
+
+                    else:
+                        destination = []
+                        source = []
 
         # Given the transhipment decision has been made, generate the acceptable order-up-to levels
         if ordering_type == "EchBS":
