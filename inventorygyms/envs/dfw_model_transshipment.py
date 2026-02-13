@@ -39,6 +39,7 @@ class TwoEchelonPLSTS(gym.Env):
         store_demand_params=[[5 for i in range(100)] for j in range(2)],
         demand_distribution=None,
         ringfence=0,
+        custom_demand=None
     ):
         self.periods = periods
         self.N = stores
@@ -62,6 +63,10 @@ class TwoEchelonPLSTS(gym.Env):
         self.demand_distribution = demand_distribution
         self.ringfence = ringfence
 
+        # Check if we requested custom demand
+        self.custom_demand_occurs = True if custom_demand is not None else False 
+        
+
         # For backwards compatibility send a warning if the demand distribution is not set
         if self.demand_distribution is None:
             warnings.warn(
@@ -78,6 +83,13 @@ class TwoEchelonPLSTS(gym.Env):
             )
 
         # Store the params
+        if self.custom_demand_occurs:
+            self.online_demand_real = custom_demand[0] # Set online demand as the first item in the list
+            self.store_demand_real = custom_demand[1:]
+        else: 
+            # Set dummy
+            self.online_demand_real = None 
+            self.store_demand_real = None
         self.online_demand_params = online_demand_params
         self.store_demand_params = store_demand_params
 
@@ -158,7 +170,7 @@ class TwoEchelonPLSTS(gym.Env):
                 means.append([(r * (1 - p)) / p for r, p in params[idx]])
         return means
 
-    def _gen_demand(self, distribution, params):
+    def _gen_demand(self, distribution, params, custom=False):
         if distribution == "Poisson":
             return self.np_random.poisson(params)
         elif distribution == "NegBin":
@@ -175,6 +187,7 @@ class TwoEchelonPLSTS(gym.Env):
                 [m for m, s in params], [s for m, s in params]
             )
             return np.maximum(np.round(temp_demand), 0)
+        
         ValueError("Bare with, haven't finished this yet.")
 
     def net_transhipments(self, ts_action):
@@ -205,7 +218,7 @@ class TwoEchelonPLSTS(gym.Env):
         # Reset demand
         self.online_demand = self._gen_demand(
             self.demand_distribution[0], self.online_demand_params
-        )
+        ) if not self.custom_demand_occurs else np.array(self.online_demand_real)
         self.store_demand = np.array(
             [
                 self._gen_demand(
@@ -213,7 +226,7 @@ class TwoEchelonPLSTS(gym.Env):
                 )
                 for i in range(self.N)
             ]
-        )
+        ) if not self.custom_demand_occurs else np.array(self.store_demand_real)
 
         self.wh_actions_log = np.zeros(
             T, dtype=np.int32
