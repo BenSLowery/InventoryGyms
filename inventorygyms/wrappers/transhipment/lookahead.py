@@ -234,7 +234,7 @@ class ts_la(Wrapper):
                             raise Exception("Stuck in an infinite transhipment loop :(")
 
                         if IL[group_indexes[source[alpha]]] + ts_sums[group_indexes[source[alpha]]] <= 0:
-                            source.remove(group_indexes[source[alpha]])
+                            source.remove(source[alpha])
 
                     else:
                         destination = []
