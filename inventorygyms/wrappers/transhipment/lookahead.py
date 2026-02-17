@@ -92,19 +92,19 @@ class ts_la(Wrapper):
 
             return (exp, exp_first_stage, q)
 
-    def _net_transhipments_sum(self):
+    def _net_transhipments_sum(self, i, k):
         """
         The s(i,k) function which tells you the net transhipments for store i given a change in k.
         """
-        return [
+        return (
             sum(
                 [
                     self.action_array[j + 1, i + 1] - self.action_array[i + 1, j + 1]
                     for j in range(self.unwrapped.N)
                 ]
             )
-            for i in range(self.unwrapped.N)
-        ]
+            + k
+        )
 
     def generate_action(
         self, warehouse_order, transhipment=True, warehouse_order_type="EchBS"
@@ -158,18 +158,18 @@ class ts_la(Wrapper):
                 # LOGIC: its very hacky
                 while (len(source) > 0) and (len(destination) > 0):
                     # Get transhipments
-                    ts_sums = self._net_transhipments_sum()
 
                     alpha_val = []  # To find best source
                     alpha_val_immediate = []
                     delta_val = []  # To find best destination
                     delta_val_immediate = []
 
+
                     for s_idx_init in source:
                         s_idx = group_indexes[s_idx_init]
-                        # Calculate expected shortages
+                        
                         alpha_minus_1, alpha_minus_1_immediate, q = self._lookahead(
-                            IL[s_idx] + ts_sums[s_idx],
+                            IL[s_idx] + self._net_transhipments_sum(s_idx, 0),
                             -1,
                             d1_means[s_idx],
                             d2_means[s_idx],
@@ -177,7 +177,7 @@ class ts_la(Wrapper):
                             self.unwrapped.demand_distribution[s_idx + 1],
                         )
                         alpha_0, alpha_0_immediate, _ = self._lookahead(
-                            IL[s_idx] + ts_sums[s_idx],
+                            IL[s_idx] + self._net_transhipments_sum(s_idx, 0),
                             0,
                             d1_means[s_idx],
                             d2_means[s_idx],
@@ -198,7 +198,7 @@ class ts_la(Wrapper):
                         # Calculate expected shortages
                         delta_0, delta_0_immediate, _ = self._lookahead(
 
-                            IL[d_idx] + ts_sums[d_idx],
+                            IL[d_idx] + self._net_transhipments_sum(d_idx, 0),
                             0,
                             d1_means[d_idx],
                             d2_means[d_idx],
@@ -206,7 +206,7 @@ class ts_la(Wrapper):
                             self.unwrapped.demand_distribution[d_idx + 1],
                         )
                         delta_plus_1, delta_plus_1_immediate, _ = self._lookahead(
-                            IL[d_idx] + ts_sums[d_idx],
+                            IL[d_idx] + self._net_transhipments_sum(d_idx, 0),
                             1,
                             d1_means[d_idx],
                             d2_means[d_idx],
@@ -222,9 +222,7 @@ class ts_la(Wrapper):
                     max_delta = max(delta_val)
                     delta = delta_val.index(max_delta)
 
-                    if (
-                        (max_delta - min_alpha) > self.unwrapped.c_ts[self.unwrapped.cluster_mapping[group_indexes[alpha]]] / self.unwrapped.cu
-                    ) and ((delta_val_immediate[delta]) >= (alpha_val_immediate[alpha])):
+                    if ((max_delta - min_alpha) > self.unwrapped.c_ts[self.unwrapped.cluster_mapping[group_indexes[alpha]]] / self.unwrapped.cu) and ((delta_val_immediate[delta]) >= (alpha_val_immediate[alpha])):
                         # Make the transhipment
                         self.action_array[group_indexes[source[alpha]] + 1, group_indexes[destination[delta]] + 1] += 1
 
@@ -233,9 +231,9 @@ class ts_la(Wrapper):
                         if np.diag(self.action_array).sum() > 0:
                             raise Exception("Stuck in an infinite transhipment loop :(")
 
-                        if IL[group_indexes[source[alpha]]] + ts_sums[group_indexes[source[alpha]]] <= 0:
+                        if (IL[group_indexes[source[alpha]]] + self._net_transhipments_sum(group_indexes[source[alpha]], 0)) <= 0:
+                            
                             source.remove(source[alpha])
-
                     else:
                         destination = []
                         source = []
@@ -247,12 +245,10 @@ class ts_la(Wrapper):
                 else [0 for i in range(self.unwrapped.N)]
             )
 
-        # Calculate the transhipment matrix and each individual q to return
-        final_ts_sums = self._net_transhipments_sum()
         # The warehouse orders an echelon base-stock policy
         final_store_orders = [
             self._lookahead(
-                IL[s] + final_ts_sums[s],
+                IL[s] + self._net_transhipments_sum(s,0),
                 0,
                 d1_means[s],
                 d2_means[s],
@@ -266,7 +262,7 @@ class ts_la(Wrapper):
                 max(warehouse_order - self.unwrapped.state["warehouse"][0], 0)
             ] + [
                 self._lookahead(
-                    IL[s] + final_ts_sums[s],
+                    IL[s] + self._net_transhipments_sum(s,0),
                     0,
                     d1_means[s],
                     d2_means[s],
